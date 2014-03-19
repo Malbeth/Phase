@@ -36,10 +36,32 @@ for(i in seq(along=list.t1)) {#Loop for temperature value assignment
 var.t$V1 <- NULL
 colnames(var.t) <- c("file","STATION","Y","D","T")
 
+## Add cols for daylength and day length factor ("DLF")
+var.t$new.col <- 0
+colnames(var.t) <- c("file","STATION","Y","D","T","daylength")
+var.t$new.col <- 0
+colnames(var.t) <- c("file","STATION","Y","D","T","daylength", "DLF")
+
 ##Deleting of missing values (here: t=-999)
 var.t <- var.t[which(var.t$T > -999),]
 
-##Import of weather stations' shape file (shp.ts) and  joining with imported temperatures (var.t) and a look-up table 'doy-date' (lut.doy)
+## Determination of base temperature, 
+## see: http://en.wikipedia.org/wiki/Growing_degree-day#Baselines and http://ndawn.ndsu.nodak.edu/help-barley-growing-degree-days.html
+t_base <- 10 # Default value
+if (PLANT == 201) {t_base <- 20}
+if (PLANT == 202) {t_base <- 55}
+if (PLANT == 203) {t_base <- 55}
+if (PLANT == 204) {t_base <- 55}
+if (PLANT == 205) {t_base <- 50}
+if (PLANT == 208) {t_base <- 55}
+if (PLANT == 210) {t_base <- 100}
+if (PLANT == 221) {t_base <- 10}
+if (PLANT == 231) {t_base <- 80}
+
+## Calculation of growing degrees: GDD=sum(T_mean - T_base)
+var.t$T <- var.t$T-t_base
+
+## Import of weather stations' shape file (shp.ts) and  joining with imported temperatures (var.t) and a look-up table 'doy-date' (lut.doy)
 dbf.t <- read.dbf(file.path(initial.dir,set2))
 shp.ts <- dbf.t$dbf
 var.t <- merge(var.t,shp.ts, by="STATION")
@@ -50,6 +72,10 @@ var.t <- merge(var.t,lut.doy, by="D")
 var.t <- var.t[which(var.t$ID_DEM != "NA"),]
 var.t <- merge(var.t,var.dem, by="ID_DEM")
 
+
+## Calculation of daylength factor
+var.t$DLF <- var.t$daylength/24}
+
 ##Splitting of var.t according to DOY
 list.t2 <- split(var.t,var.t$DOY)
 
@@ -59,7 +85,7 @@ set.seed(100)
 v.t <- data.frame(pHU=NULL)
 
 for(i in seq(along=list.t2)){   #Loop for temperature prediction using Random Forest algorithm (Breiman 2001)
-                rf.t <- randomForest(T ~ DEM,   data=list.t2[[i]], proximity = TRUE)
+                rf.t <- randomForest((DLF*T) ~ DEM,   data=list.t2[[i]], proximity = TRUE)      # Pediction includes daylength adustment 
                 var.dem[[paste('T',i,sep="")]] <-   predict(rf.t, var.dem)
                 rsq.t <- rf.t$rsq
                 rsq.t <- rsq.t[length(rsq.t)]
